@@ -1,0 +1,150 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+
+//@version=6
+indicator('Relative Strength Index', 'RSI', overlay = false, format = format.price, precision = 2)
+
+//=============================================================================
+// Settings
+//=============================================================================
+rsiLength = input.int(14, title = 'RSI Length', minval = 1, group = 'RSI')
+rsiSource = input.source((O + H + L + C) /4, title = 'Source', group = 'RSI')
+useHeikinAshi = input.bool(true, title = 'Calculate Using Heikin Ashi Candles', group = 'RSI', tooltip = 'Computes RSI (and divergence price pivots) from synthetic Heikin Ashi OHLC instead of the chart\'s actual candles, regardless of the chart\'s own display type, for a smoother pattern.')
+
+overboughtLevel = input.int(70, title = 'Overbought Level', minval = 50, maxval = 100, group = 'Levels')
+oversoldLevel = input.int(30, title = 'Oversold Level', minval = 0, maxval = 50, group = 'Levels')
+midLevel = input.int(50, title = 'Midline', group = 'Levels')
+showMidline = input.bool(true, title = 'Show Midline', group = 'Levels')
+
+rsiColor = input.color(color.aqua, title = 'RSI Line Color', group = 'Style')
+highlightZones = input.bool(true, title = 'Highlight Overbought/Oversold Zones', group = 'Style')
+obColor = input.color(color.red, title = 'Overbought Line Color', group = 'Style')
+osColor = input.color(color.green, title = 'Oversold Line Color', group = 'Style')
+midColor = input.color(color.new(color.gray, 50), title = 'Midline Color', group = 'Style')
+smoothingMAColor = input.color(color.yellow, title = 'Smoothing MA Color', group = 'Style')
+bbColor = input.color(color.green, title = 'Smoothing Bollinger Bands Color', group = 'Style')
+
+// Smoothing — mirrors the "Smoothing" group in TradingView's built-in RSI settings
+smoothingType = input.string('SMA + Bollinger Bands', title = 'Type', options = ['None', 'SMA', 'SMA + Bollinger Bands', 'EMA', 'SMMA (RMA)', 'WMA', 'VWMA'], group = 'Smoothing')
+smoothingLength = input.int(14, title = 'Length', minval = 1, group = 'Smoothing')
+bbStdDev = input.float(1.0, title = 'BB StdDev', minval = 0.001, maxval = 50, group = 'Smoothing')
+
+// Divergence
+calculateDivergence = input.bool(false, title = 'Calculate Divergence', group = 'Divergence')
+divLookbackLeft = input.int(10, title = 'Pivot Lookback Left', minval = 1, group = 'Divergence')
+divLookbackRight = input.int(10, title = 'Pivot Lookback Right', minval = 1, group = 'Divergence')
+divRangeLower = input.int(5, title = 'Min of Lookback Range', minval = 1, group = 'Divergence')
+divRangeUpper = input.int(60, title = 'Max of Lookback Range', minval = 1, group = 'Divergence')
+plotBullDiv = input.bool(true, title = 'Plot Bullish', inline = 'bulldiv', group = 'Divergence')
+bullDivColor = input.color(color.green, title = '', inline = 'bulldiv', group = 'Divergence')
+plotHiddenBullDiv = input.bool(false, title = 'Plot Hidden Bullish', inline = 'hbulldiv', group = 'Divergence')
+hiddenBullDivColor = input.color(color.new(color.green, 80), title = '', inline = 'hbulldiv', group = 'Divergence')
+plotBearDiv = input.bool(true, title = 'Plot Bearish', inline = 'beardiv', group = 'Divergence')
+bearDivColor = input.color(color.red, title = '', inline = 'beardiv', group = 'Divergence')
+plotHiddenBearDiv = input.bool(false, title = 'Plot Hidden Bearish', inline = 'hbeardiv', group = 'Divergence')
+hiddenBearDivColor = input.color(color.new(color.red, 80), title = '', inline = 'hbeardiv', group = 'Divergence')
+
+//=============================================================================
+// Calculation
+//=============================================================================
+// request.security() with ticker.heikinashi() always returns the synthetic Heikin Ashi
+// OHLC, independent of whatever chart type the user actually has displayed.
+haTicker = ticker.heikinashi(syminfo.tickerid)
+haClose = request.security(haTicker, timeframe.period, close, lookahead = barmerge.lookahead_off)
+haHigh = request.security(haTicker, timeframe.period, high, lookahead = barmerge.lookahead_off)
+haLow = request.security(haTicker, timeframe.period, low, lookahead = barmerge.lookahead_off)
+
+rsiPriceSource = useHeikinAshi ? haClose : rsiSource
+divPriceHigh = useHeikinAshi ? haHigh : high
+divPriceLow = useHeikinAshi ? haLow : low
+
+rsiValue = ta.rsi(rsiPriceSource, rsiLength)
+
+//=============================================================================
+// Plots
+//=============================================================================
+plot(rsiValue, title = 'RSI', color = rsiColor, linewidth = 2)
+
+obLine = hline(overboughtLevel, title = 'Overbought', color = obColor, linestyle = hline.style_dashed)
+osLine = hline(oversoldLevel, title = 'Oversold', color = osColor, linestyle = hline.style_dashed)
+fill(obLine, osLine, color = color.new(color.gray, 92), title = 'Overbought/Oversold Background')
+
+midLinePlot = showMidline ? midLevel : na
+hline(midLinePlot, title = 'Midline', color = midColor, linestyle = hline.style_dotted)
+
+bgcolor(highlightZones ? (rsiValue >= overboughtLevel ? color.new(color.red, 90) : rsiValue <= oversoldLevel ? color.new(color.green, 90) : na) : na)
+
+//=============================================================================
+// Smoothing (MA / Bollinger Bands on the RSI line)
+//=============================================================================
+f_smoothingMA(source, length) =>
+    switch smoothingType
+        'SMA' => ta.sma(source, length)
+        'SMA + Bollinger Bands' => ta.sma(source, length)
+        'EMA' => ta.ema(source, length)
+        'SMMA (RMA)' => ta.rma(source, length)
+        'WMA' => ta.wma(source, length)
+        'VWMA' => ta.vwma(source, length)
+
+smoothingMA = smoothingType == 'None' ? na : f_smoothingMA(rsiValue, smoothingLength)
+plot(smoothingMA, title = 'RSI-based MA', color = smoothingMAColor)
+
+bbDev = ta.stdev(rsiValue, smoothingLength) * bbStdDev
+bbUpper = smoothingMA + bbDev
+bbLower = smoothingMA - bbDev
+bbUpperPlot = plot(smoothingType == 'SMA + Bollinger Bands' ? bbUpper : na, title = 'Upper Bollinger Band', color = bbColor)
+bbLowerPlot = plot(smoothingType == 'SMA + Bollinger Bands' ? bbLower : na, title = 'Lower Bollinger Band', color = bbColor)
+fill(bbUpperPlot, bbLowerPlot, color = smoothingType == 'SMA + Bollinger Bands' ? color.new(bbColor, 90) : na, title = 'Bollinger Bands Background')
+
+//=============================================================================
+// Divergence
+//=============================================================================
+plFound = not na(ta.pivotlow(rsiValue, divLookbackLeft, divLookbackRight))
+phFound = not na(ta.pivothigh(rsiValue, divLookbackLeft, divLookbackRight))
+
+f_inRange(cond) =>
+    bars = ta.barssince(cond)
+    divRangeLower <= bars and bars <= divRangeUpper
+
+// Regular Bullish: RSI Higher Low, Price Lower Low
+rsiHL = rsiValue[divLookbackRight] > ta.valuewhen(plFound, rsiValue[divLookbackRight], 1) and f_inRange(plFound[1])
+priceLL = divPriceLow[divLookbackRight] < ta.valuewhen(plFound, divPriceLow[divLookbackRight], 1)
+bullCond = calculateDivergence and plotBullDiv and priceLL and rsiHL and plFound
+
+// Drawn as a line connecting successive RSI pivot lows (instead of a flag/label) — the
+// segment only lights up in bullDivColor when it closes into a confirmed divergence,
+// otherwise it stays invisible so unrelated pivots don't clutter the pane.
+plot(plFound ? rsiValue[divLookbackRight] : na, offset = -divLookbackRight, title = 'Regular Bullish Divergence Line', linewidth = 2, color = bullCond ? bullDivColor : color.new(bullDivColor, 100))
+
+// Hidden Bullish: RSI Lower Low, Price Higher Low
+rsiLL = rsiValue[divLookbackRight] < ta.valuewhen(plFound, rsiValue[divLookbackRight], 1) and f_inRange(plFound[1])
+priceHL = divPriceLow[divLookbackRight] > ta.valuewhen(plFound, divPriceLow[divLookbackRight], 1)
+hiddenBullCond = calculateDivergence and plotHiddenBullDiv and priceHL and rsiLL and plFound
+
+plotshape(hiddenBullCond ? rsiValue[divLookbackRight] : na, offset = -divLookbackRight, title = 'Hidden Bullish Divergence', text = ' H Bull ', style = shape.labelup, location = location.absolute, color = hiddenBullDivColor, textcolor = color.white)
+
+// Regular Bearish: RSI Lower High, Price Higher High
+rsiLH = rsiValue[divLookbackRight] < ta.valuewhen(phFound, rsiValue[divLookbackRight], 1) and f_inRange(phFound[1])
+priceHH = divPriceHigh[divLookbackRight] > ta.valuewhen(phFound, divPriceHigh[divLookbackRight], 1)
+bearCond = calculateDivergence and plotBearDiv and priceHH and rsiLH and phFound
+
+// Same line-connecting approach as the bullish case above, for pivot highs.
+plot(phFound ? rsiValue[divLookbackRight] : na, offset = -divLookbackRight, title = 'Regular Bearish Divergence Line', linewidth = 2, color = bearCond ? bearDivColor : color.new(bearDivColor, 100))
+
+// Hidden Bearish: RSI Higher High, Price Lower High
+rsiHH = rsiValue[divLookbackRight] > ta.valuewhen(phFound, rsiValue[divLookbackRight], 1) and f_inRange(phFound[1])
+priceLH = divPriceHigh[divLookbackRight] < ta.valuewhen(phFound, divPriceHigh[divLookbackRight], 1)
+hiddenBearCond = calculateDivergence and plotHiddenBearDiv and priceLH and rsiHH and phFound
+
+plotshape(hiddenBearCond ? rsiValue[divLookbackRight] : na, offset = -divLookbackRight, title = 'Hidden Bearish Divergence', text = ' H Bear ', style = shape.labeldown, location = location.absolute, color = hiddenBearDivColor, textcolor = color.white)
+
+//=============================================================================
+// Alerts
+//=============================================================================
+alertcondition(ta.crossover(rsiValue, overboughtLevel), title = 'RSI Overbought', message = 'RSI crossed above the overbought level')
+alertcondition(ta.crossunder(rsiValue, oversoldLevel), title = 'RSI Oversold', message = 'RSI crossed below the oversold level')
+alertcondition(ta.crossover(rsiValue, midLevel), title = 'RSI Cross Above Midline', message = 'RSI crossed above the midline')
+alertcondition(ta.crossunder(rsiValue, midLevel), title = 'RSI Cross Below Midline', message = 'RSI crossed below the midline')
+alertcondition(bullCond, title = 'RSI Regular Bullish Divergence', message = 'Regular bullish divergence detected')
+alertcondition(hiddenBullCond, title = 'RSI Hidden Bullish Divergence', message = 'Hidden bullish divergence detected')
+alertcondition(bearCond, title = 'RSI Regular Bearish Divergence', message = 'Regular bearish divergence detected')
+alertcondition(hiddenBearCond, title = 'RSI Hidden Bearish Divergence', message = 'Hidden bearish divergence detected')

@@ -1,0 +1,56 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © verrynoval2
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+
+//@version=6
+indicator('Price to Book Value', 'P/BV', overlay = false, format = format.price, precision = 2)
+
+//=============================================================================
+// Settings
+//=============================================================================
+pbvPeriod = input.string('FQ', title = 'Reporting Period', options = ['FQ', 'FY', 'FH'], group = 'P/BV', tooltip = 'FQ = Fiscal Quarter, FY = Fiscal Year, FH = Fiscal Half-Year. Only available for stocks with published financial statements. TTM is not supported for book value per share.')
+aboveAvgColor = input.color(color.red, title = 'Line Color When Above Average', group = 'Style')
+belowAvgColor = input.color(color.green, title = 'Line Color When Below Average', group = 'Style')
+
+overvaluedLevel = input.float(3.0, title = 'Overvalued Level', minval = 0, group = 'Levels')
+undervaluedLevel = input.float(1.0, title = 'Undervalued Level (Book Value)', minval = 0, group = 'Levels')
+highlightZones = input.bool(false, title = 'Highlight Overvalued/Undervalued Zones', group = 'Style')
+
+showAvg = input.bool(true, title = 'Show Historical Average', group = 'Average')
+avgLength = input.int(100, title = 'Average Length', minval = 1, group = 'Average')
+avgColor = input.color(color.yellow, title = 'Average Line Color', group = 'Average')
+
+//=============================================================================
+// Calculation
+//=============================================================================
+// There is no direct "Price to Book Ratio" financial ID in Pine — TradingView only
+// exposes book value per share (BOOK_VALUE_PER_SHARE), so the ratio is computed manually
+// as price / book value per share, per TradingView's own documented formula for this.
+// request.financial() only returns non-na values on bars at/after an actual report date —
+// bvps otherwise holds its last known value until the next report, which naturally
+// produces the step-like behavior fundamental data has (it doesn't move every bar like
+// price does).
+std_close = request.security(syminfo.tickerid, timeframe.period, close, lookahead = barmerge.lookahead_off)
+bvps = request.financial(syminfo.tickerid, 'BOOK_VALUE_PER_SHARE', pbvPeriod)
+pbv = std_close / bvps
+pbvAvg = ta.sma(pbv, avgLength)
+
+//=============================================================================
+// Plots
+//=============================================================================
+pbvColor = pbv > pbvAvg ? aboveAvgColor : belowAvgColor
+plot(pbv, title = 'Price to Book Value', color = pbvColor, linewidth = 2)
+plot(showAvg ? pbvAvg : na, title = 'Historical Average', color = avgColor)
+
+ovLine = hline(overvaluedLevel, title = 'Overvalued', color = color.red, linestyle = hline.style_dashed)
+uvLine = hline(undervaluedLevel, title = 'Undervalued (Book Value)', color = color.green, linestyle = hline.style_dashed)
+fill(ovLine, uvLine, color = color.new(color.gray, 92), title = 'Fair Value Background')
+
+bgcolor(highlightZones ? (pbv >= overvaluedLevel ? color.new(color.red, 90) : pbv <= undervaluedLevel ? color.new(color.green, 90) : na) : na)
+
+//=============================================================================
+// Alerts
+//=============================================================================
+alertcondition(ta.crossover(pbv, overvaluedLevel), title = 'P/BV Overvalued', message = 'Price to Book Value crossed above the overvalued level')
+alertcondition(ta.crossunder(pbv, undervaluedLevel), title = 'P/BV Undervalued', message = 'Price to Book Value crossed below the undervalued (book value) level')

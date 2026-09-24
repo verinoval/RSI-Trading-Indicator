@@ -1,0 +1,27 @@
+//@version=5
+indicator('RSI Trend', overlay=false)
+src = input((O + H + L + C) /4, title='Source')
+smooth = input.int(1, title='Smoothing', minval=1)
+length = input.int(25, title='Lookback', minval=1)
+offset = input.float(0.9, title='ALMA Offset', step=0.01)
+sigma = input.int(3, title='ALMA Sigma', minval=0)
+bmult = input(1.0, 'Band Multiplier')
+cblen = input(true, 'Custom Band Length ? (Else same as Lookback)')
+blen = input(20, 'Custom Band Length')
+highlight = input(true)
+fill = input(true)
+barcol = input(false, 'Bar Color')
+pch = ta.change(src, smooth) / src * 100
+avpch = ta.alma(pch, length, offset, sigma)
+blength = cblen ? blen : length
+rms = bmult * math.sqrt(math.sum(avpch * avpch, blength) / blength)
+cdir = avpch > rms ? 1 : avpch < -rms ? -1 : 0
+col = cdir == 1 ? color.lime : cdir == -1 ? color.red : color.gray
+fplot = plot(avpch, color=highlight ? col : color.blue, linewidth=2)
+posrms = plot(rms, color=color.new(color.purple, 0))
+negrms = plot(-rms, color=color.new(color.purple, 0))
+fill(fplot, posrms, color=fill and cdir > 0 ? col : na, transp=50)
+fill(fplot, negrms, color=fill and cdir < 0 ? col : na, transp=50)
+barcolor(color=barcol ? col : na)
+hline(0)
+
