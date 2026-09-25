@@ -7,7 +7,7 @@ indicator('Relative Strength Index', 'RSI', overlay = false, format = format.pri
 // Settings
 //=============================================================================
 rsiLength = input.int(14, title = 'RSI Length', minval = 1, group = 'RSI')
-rsiSource = input.source((O + H + L + C) /4, title = 'Source', group = 'RSI')
+rsiSource = input.source(ohlc4, title = 'Source', group = 'RSI')
 useHeikinAshi = input.bool(true, title = 'Calculate Using Heikin Ashi Candles', group = 'RSI', tooltip = 'Computes RSI (and divergence price pivots) from synthetic Heikin Ashi OHLC instead of the chart\'s actual candles, regardless of the chart\'s own display type, for a smoother pattern.')
 
 overboughtLevel = input.int(70, title = 'Overbought Level', minval = 50, maxval = 100, group = 'Levels')
@@ -16,12 +16,12 @@ midLevel = input.int(50, title = 'Midline', group = 'Levels')
 showMidline = input.bool(true, title = 'Show Midline', group = 'Levels')
 
 rsiColor = input.color(color.aqua, title = 'RSI Line Color', group = 'Style')
-highlightZones = input.bool(true, title = 'Highlight Overbought/Oversold Zones', group = 'Style')
-obColor = input.color(color.red, title = 'Overbought Line Color', group = 'Style')
+highlightZones = input.bool(false, title = 'Highlight Overbought/Oversold Zones', group = 'Style')
+obColor = input.color(color.gray, title = 'Overbought Line Color', group = 'Style')
 osColor = input.color(color.green, title = 'Oversold Line Color', group = 'Style')
 midColor = input.color(color.new(color.gray, 50), title = 'Midline Color', group = 'Style')
 smoothingMAColor = input.color(color.yellow, title = 'Smoothing MA Color', group = 'Style')
-bbColor = input.color(color.green, title = 'Smoothing Bollinger Bands Color', group = 'Style')
+bbColor = input.color(color.orange, title = 'Smoothing Bollinger Bands Color', group = 'Style')
 
 // Smoothing — mirrors the "Smoothing" group in TradingView's built-in RSI settings
 smoothingType = input.string('SMA + Bollinger Bands', title = 'Type', options = ['None', 'SMA', 'SMA + Bollinger Bands', 'EMA', 'SMMA (RMA)', 'WMA', 'VWMA'], group = 'Smoothing')
@@ -29,7 +29,7 @@ smoothingLength = input.int(14, title = 'Length', minval = 1, group = 'Smoothing
 bbStdDev = input.float(1.0, title = 'BB StdDev', minval = 0.001, maxval = 50, group = 'Smoothing')
 
 // Divergence
-calculateDivergence = input.bool(false, title = 'Calculate Divergence', group = 'Divergence')
+calculateDivergence = input.bool(true, title = 'Calculate Divergence', group = 'Divergence')
 divLookbackLeft = input.int(10, title = 'Pivot Lookback Left', minval = 1, group = 'Divergence')
 divLookbackRight = input.int(10, title = 'Pivot Lookback Right', minval = 1, group = 'Divergence')
 divRangeLower = input.int(5, title = 'Min of Lookback Range', minval = 1, group = 'Divergence')
@@ -91,9 +91,9 @@ plot(smoothingMA, title = 'RSI-based MA', color = smoothingMAColor)
 bbDev = ta.stdev(rsiValue, smoothingLength) * bbStdDev
 bbUpper = smoothingMA + bbDev
 bbLower = smoothingMA - bbDev
-bbUpperPlot = plot(smoothingType == 'SMA + Bollinger Bands' ? bbUpper : na, title = 'Upper Bollinger Band', color = bbColor)
-bbLowerPlot = plot(smoothingType == 'SMA + Bollinger Bands' ? bbLower : na, title = 'Lower Bollinger Band', color = bbColor)
-fill(bbUpperPlot, bbLowerPlot, color = smoothingType == 'SMA + Bollinger Bands' ? color.new(bbColor, 90) : na, title = 'Bollinger Bands Background')
+bbUpperPlot = plot(smoothingType == 'SMA + Bollinger Bands' ? bbUpper : na, title = 'Upper Bollinger Band', color = bbColor, style = plot.style_circles)
+bbLowerPlot = plot(smoothingType == 'SMA + Bollinger Bands' ? bbLower : na, title = 'Lower Bollinger Band', color = bbColor, style = plot.style_circles)
+fill(bbUpperPlot, bbLowerPlot, color = smoothingType == 'SMA + Bollinger Bands' ? color.new(bbColor, 85) : na, title = 'Bollinger Bands Background')
 
 //=============================================================================
 // Divergence
